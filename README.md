@@ -13,8 +13,5 @@ page-declared fisheye) drawn by a WebGL renderer inside the media controls.
 If the video plays flat and dragging does nothing, the flag is off or the build
 predates the feature.
 
-## Serving
-
-```sh
-./start.sh        # http://localhost:8778
-```
+### Link to website below
+https://phinny01.github.io/SpatialRendererTestPage/
