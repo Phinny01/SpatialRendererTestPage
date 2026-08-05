@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spatial Video Rendering — WebKit test page</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0 auto; padding: 28px 20px 64px; max-width: 860px;
+    background: #1c1c1e; color: #e8e8ed;
+    font: 15px/1.5 -apple-system, system-ui, sans-serif;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #98989d; margin: 0 0 24px; }
+  .panel {
+    background: #2c2c2e; border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 20px;
+  }
+  .panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .5px;
+              color: #98989d; margin: 0 0 10px; }
+  code { background: rgba(255,255,255,.1); padding: 1px 6px; border-radius: 4px;
+         font: 13px ui-monospace, monospace; }
+  ol, ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  #tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  button {
+    background: #2c2c2e; color: #fff; border: 1px solid rgba(255,255,255,.15);
+    border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #3a3a3c; }
+  button.sel { background: #0a84ff; border-color: #0a84ff; }
+  video { width: 100%; max-width: 720px; aspect-ratio: 2 / 1;
+          background: #000; display: block; border-radius: 10px; }
+  .expect { color: #98989d; font-size: 14px; margin: 10px 0 0; }
+  .expect b { color: #e8e8ed; font-weight: 600; }
+  .warn { border-color: rgba(255,159,10,.5); background: rgba(255,159,10,.1); }
+  .ok { color: #30d158; } .bad { color: #ff9f0a; }
+</style>
+</head>
+<body>
+
+<h1>Spatial Video Rendering</h1>
+<p class="sub">Test page for projected video (360°, 180°, wide-FOV) rendered in WebKit's media controls.</p>
+
+<div class="panel" id="setup">
+  <h2>Before you start</h2>
+  <ol>
+    <li>Open <b>Develop &rsaquo; Feature Flags</b> (Safari Technology Preview).</li>
+    <li>Enable <code>Spatial Video Rendering</code>. It is <b>off by default</b>.</li>
+    <li>Reload this page.</li>
+  </ol>
+  <p class="expect" id="preflight">Checking WebGL2 support&hellip;</p>
+</div>
+
+<div id="tabs"></div>
+<div id="mount"></div>
+<p class="expect" id="expect"></p>
+
+<div class="panel">
+  <h2>How to tell it is working</h2>
+  <ul>
+    <li><b>Working:</b> dragging on the video rotates your view inside the scene.</li>
+    <li><b>Not working:</b> the video plays flat and dragging does nothing &mdash; the flag is off, or the build lacks the feature.</li>
+  </ul>
+  <p class="expect">This page deliberately cannot auto-detect the feature: the renderer draws into the
+  media controls' user-agent shadow root, which page scripts cannot inspect, and the projection
+  metadata is intentionally not exposed to the open web. Dragging is the check.</p>
+</div>
+
+<script>
+const APPLE_SAMPLES = "https://devstreaming-cdn.apple.com/videos/streaming/examples/immersive-media/";
+
+const CLIPS = [
+  {
+    label: "360°",
+    src: APPLE_SAMPLES + "360Lighthouse/mvp.m3u8",
+    expect: "Equirectangular 360°, detected from track metadata. Drag to look in any direction."
+  },
+  {
+    label: "180°",
+    src: APPLE_SAMPLES + "180Lighthouse/mvp.m3u8",
+    expect: "Half-equirectangular 180°, detected from track metadata. Drag to look around; the view stops at the edge of the captured hemisphere."
+  },
+  {
+    label: "Wide FOV",
+    src: APPLE_SAMPLES + "wfovCausewayWalk/mvp.m3u8",
+    expect: "Parametric wide-FOV, detected from track metadata. Drag to pan within the wide frame."
+  },
+  {
+    label: "Fisheye (forced)",
+    src: APPLE_SAMPLES + "180Lighthouse/mvp.m3u8",
+    attr: "fisheye",
+    expect: "The same 180° stream with x-webkit-spatial=\"fisheye\", overriding the metadata. Proves the attribute override path."
+  },
+];
+
+const mount = document.getElementById("mount");
+const tabs = document.getElementById("tabs");
+const expect = document.getElementById("expect");
+
+(function preflight() {
+  const el = document.getElementById("preflight");
+  const gl = document.createElement("canvas").getContext("webgl2");
+  if (gl) {
+    el.innerHTML = '<span class="ok">&#10003;</span> WebGL2 available &mdash; this browser can render the projections.';
+  } else {
+    el.innerHTML = '<span class="bad">&#9888;</span> WebGL2 unavailable &mdash; the renderer requires it and will stay flat.';
+    document.getElementById("setup").classList.add("warn");
+  }
+})();
+
+function select(clip, btn) {
+  [...tabs.children].forEach(b => b.classList.toggle("sel", b === btn));
+  expect.innerHTML = "<b>Expected:</b> " + clip.expect;
+
+  mount.textContent = "";
+  const v = document.createElement("video");
+  if (clip.attr)
+    v.setAttribute("x-webkit-spatial", clip.attr);
+  v.setAttribute("crossorigin", "anonymous");
+  v.autoplay = v.loop = v.muted = v.playsInline = v.controls = true;
+  v.src = clip.src;
+  mount.appendChild(v);
+}
+
+CLIPS.forEach((clip, i) => {
+  const btn = document.createElement("button");
+  btn.textContent = clip.label;
+  btn.addEventListener("click", () => select(clip, btn));
+  tabs.appendChild(btn);
+  if (i === 0)
+    select(clip, btn);
+});
+</script>
+
+</body>
+</html>
