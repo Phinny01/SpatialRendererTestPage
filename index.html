@@ -61,23 +61,23 @@ const CLIPS = [
   {
     label: "360°",
     src: APPLE_SAMPLES + "360Lighthouse/mvp.m3u8",
-    expect: "Equirectangular 360°, detected from track metadata. Drag to look in any direction."
+    expect: "Projection read from the clip’s APMP metadata (equirectangular). Drag to look in any direction."
   },
   {
     label: "180°",
     src: APPLE_SAMPLES + "180Lighthouse/mvp.m3u8",
-    expect: "Half-equirectangular 180°, detected from track metadata. Drag to look around; the view stops at the edge of the captured hemisphere."
+    expect: "Projection read from the clip’s APMP metadata (half-equirectangular). Drag to look around; the view stops at the edge of the captured hemisphere."
   },
   {
     label: "Wide FOV",
     src: APPLE_SAMPLES + "wfovCausewayWalk/mvp.m3u8",
-    expect: "Parametric wide-FOV, detected from track metadata. Drag to pan within the wide frame."
+    expect: "Projection read from the clip’s APMP metadata (parametric wide-FOV). Drag to pan within the wide frame."
   },
   {
-    label: "Fisheye (forced)",
+    label: "Fisheye",
     src: APPLE_SAMPLES + "180Lighthouse/mvp.m3u8",
     attr: "fisheye",
-    expect: "The same 180° stream with x-webkit-spatial=\"fisheye\", overriding the metadata. Proves the attribute override path."
+    expect: "Projection declared by the page with x-webkit-spatial=\"fisheye\" rather than read from metadata. This is how a developer specifies the projection for formats that do not carry it."
   },
 ];
 
