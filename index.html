@@ -34,8 +34,6 @@
           background: #000; display: block; border-radius: 10px; }
   .expect { color: #98989d; font-size: 14px; margin: 10px 0 0; }
   .expect b { color: #e8e8ed; font-weight: 600; }
-  .warn { border-color: rgba(255,159,10,.5); background: rgba(255,159,10,.1); }
-  .ok { color: #30d158; } .bad { color: #ff9f0a; }
 </style>
 </head>
 <body>
@@ -50,23 +48,11 @@
     <li>Enable <code>Spatial Video Rendering</code>. It is <b>off by default</b>.</li>
     <li>Reload this page.</li>
   </ol>
-  <p class="expect" id="preflight">Checking WebGL2 support&hellip;</p>
 </div>
 
 <div id="tabs"></div>
 <div id="mount"></div>
 <p class="expect" id="expect"></p>
-
-<div class="panel">
-  <h2>How to tell it is working</h2>
-  <ul>
-    <li><b>Working:</b> dragging on the video rotates your view inside the scene.</li>
-    <li><b>Not working:</b> the video plays flat and dragging does nothing &mdash; the flag is off, or the build lacks the feature.</li>
-  </ul>
-  <p class="expect">This page deliberately cannot auto-detect the feature: the renderer draws into the
-  media controls' user-agent shadow root, which page scripts cannot inspect, and the projection
-  metadata is intentionally not exposed to the open web. Dragging is the check.</p>
-</div>
 
 <script>
 const APPLE_SAMPLES = "https://devstreaming-cdn.apple.com/videos/streaming/examples/immersive-media/";
@@ -98,17 +84,6 @@ const CLIPS = [
 const mount = document.getElementById("mount");
 const tabs = document.getElementById("tabs");
 const expect = document.getElementById("expect");
-
-(function preflight() {
-  const el = document.getElementById("preflight");
-  const gl = document.createElement("canvas").getContext("webgl2");
-  if (gl) {
-    el.innerHTML = '<span class="ok">&#10003;</span> WebGL2 available &mdash; this browser can render the projections.';
-  } else {
-    el.innerHTML = '<span class="bad">&#9888;</span> WebGL2 unavailable &mdash; the renderer requires it and will stay flat.';
-    document.getElementById("setup").classList.add("warn");
-  }
-})();
 
 function select(clip, btn) {
   [...tabs.children].forEach(b => b.classList.toggle("sel", b === btn));
