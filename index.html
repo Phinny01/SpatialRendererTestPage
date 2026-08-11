@@ -34,6 +34,11 @@
           background: #000; display: block; border-radius: 10px; }
   .expect { color: #98989d; font-size: 14px; margin: 10px 0 0; }
   .expect b { color: #e8e8ed; font-weight: 600; }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+  .controls label { display: flex; flex-direction: column; gap: 5px;
+                    font-size: 13px; color: #98989d; }
+  select { background: #3a3a3c; color: #fff; border: 1px solid rgba(255,255,255,.15);
+           border-radius: 8px; padding: 7px 10px; font: inherit; }
 </style>
 </head>
 <body>
@@ -51,11 +56,34 @@
 </div>
 
 <div id="tabs"></div>
+<div class="panel" id="declared" hidden>
+  <h2>Declared projection</h2>
+  <p class="expect">The same 180° clip, with <code>x-webkit-projection</code> set on the element
+  instead of relying on the clip's metadata.</p>
+  <div class="controls">
+    <label>Value
+      <select id="projectionSelect"></select>
+    </label>
+  </div>
+</div>
 <div id="mount"></div>
 <p class="expect" id="expect"></p>
 
 <script>
 const APPLE_SAMPLES = "https://devstreaming-cdn.apple.com/videos/streaming/examples/immersive-media/";
+const DECLARED_SOURCE = APPLE_SAMPLES + "180Lighthouse/mvp.m3u8";
+
+const PROJECTION_VALUES = [
+  { value: "fisheye", note: "renders as a fisheye lens." },
+  { value: "auto", note: "the default — the clip's own metadata decides, so this matches the 180° tab." },
+  { value: "equirectangular", note: "renders as a full sphere, overriding the clip's half-equirectangular metadata." },
+  { value: "360", note: "alias for equirectangular." },
+  { value: "halfequirectangular", note: "renders as a hemisphere, which is what this clip's metadata already says." },
+  { value: "180", note: "alias for halfequirectangular." },
+  { value: "parametric", note: "renders as a wide-field-of-view lens." },
+  { value: "wfov", note: "alias for parametric." },
+  { value: "not-a-projection", note: "unrecognized, so it behaves exactly like auto." },
+];
 
 const CLIPS = [
   {
@@ -73,30 +101,48 @@ const CLIPS = [
     src: APPLE_SAMPLES + "wfovCausewayWalk/mvp.m3u8",
     expect: "Projection read from the clip’s APMP metadata (parametric wide-FOV). Drag to pan within the wide frame."
   },
-  {
-    label: "Fisheye",
-    src: APPLE_SAMPLES + "180Lighthouse/mvp.m3u8",
-    attr: "fisheye",
-    expect: "Projection declared by the page with x-webkit-spatial=\"fisheye\" rather than read from metadata. This is how a developer specifies the projection for formats that do not carry it."
-  },
+  { label: "Declared", declared: true },
 ];
 
 const mount = document.getElementById("mount");
 const tabs = document.getElementById("tabs");
 const expect = document.getElementById("expect");
+const declaredPanel = document.getElementById("declared");
+const projectionSelect = document.getElementById("projectionSelect");
+
+PROJECTION_VALUES.forEach(({ value }) => {
+  const option = document.createElement("option");
+  option.value = option.textContent = value;
+  projectionSelect.appendChild(option);
+});
+
+function play(src, projection, expectation) {
+  expect.innerHTML = "<b>Expected:</b> " + expectation;
+  mount.textContent = "";
+  const v = document.createElement("video");
+  if (projection)
+    v.setAttribute("x-webkit-projection", projection);
+  v.setAttribute("crossorigin", "anonymous");
+  v.autoplay = v.loop = v.muted = v.playsInline = v.controls = true;
+  v.src = src;
+  mount.appendChild(v);
+}
+
+function playDeclared() {
+  const value = projectionSelect.value;
+  const { note } = PROJECTION_VALUES.find(entry => entry.value === value);
+  play(DECLARED_SOURCE, value, `<code>x-webkit-projection="${value}"</code> — ${note}`);
+}
+
+projectionSelect.addEventListener("change", playDeclared);
 
 function select(clip, btn) {
   [...tabs.children].forEach(b => b.classList.toggle("sel", b === btn));
-  expect.innerHTML = "<b>Expected:</b> " + clip.expect;
-
-  mount.textContent = "";
-  const v = document.createElement("video");
-  if (clip.attr)
-    v.setAttribute("x-webkit-spatial", clip.attr);
-  v.setAttribute("crossorigin", "anonymous");
-  v.autoplay = v.loop = v.muted = v.playsInline = v.controls = true;
-  v.src = clip.src;
-  mount.appendChild(v);
+  declaredPanel.hidden = !clip.declared;
+  if (clip.declared)
+    playDeclared();
+  else
+    play(clip.src, null, clip.expect);
 }
 
 CLIPS.forEach((clip, i) => {
