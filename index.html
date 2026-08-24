@@ -39,6 +39,10 @@
                     font-size: 13px; color: #98989d; }
   select { background: #3a3a3c; color: #fff; border: 1px solid rgba(255,255,255,.15);
            border-radius: 8px; padding: 7px 10px; font: inherit; }
+  input[type=range] { width: 180px; accent-color: #0a84ff; }
+  .value { color: #e8e8ed; font: 13px ui-monospace, monospace; }
+  .readout { margin: 12px 0 0; font: 13px ui-monospace, monospace; color: #98989d;
+             white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -58,8 +62,9 @@
 <div id="tabs"></div>
 <div class="panel" id="declared" hidden>
   <h2>Declared projection</h2>
-  <p class="expect">The same 180° clip, with <code>x-webkit-projection</code> set on the element
-  instead of relying on the clip's metadata.</p>
+  <p class="expect">A 360° clip that carries <b>no projection metadata at all</b>, so
+  <code>x-webkit-projection</code> is the only thing that can make it render as a sphere.
+  Leave the value on <code>auto</code> and it plays flat.</p>
   <div class="controls">
     <label>Value
       <select id="projectionSelect"></select>
@@ -69,20 +74,50 @@
 <div id="mount"></div>
 <p class="expect" id="expect"></p>
 
+<div class="panel">
+  <h2>Camera</h2>
+  <p class="expect">Where the camera looks, and how wide. These set
+  <code>x-webkit-fieldofview</code>, <code>x-webkit-yaw</code> and
+  <code>x-webkit-pitch</code> through their reflected IDL attributes, so moving a slider
+  should move the view immediately.</p>
+  <div class="controls">
+    <label>Field of view
+      <input type="range" id="fieldOfView" min="30" max="110" step="1" value="80">
+      <span class="value" id="fieldOfViewValue">80°</span>
+    </label>
+    <label>Yaw
+      <input type="range" id="yaw" min="-180" max="180" step="1" value="0">
+      <span class="value" id="yawValue">0°</span>
+    </label>
+    <label>Pitch
+      <input type="range" id="pitch" min="-89" max="89" step="1" value="0">
+      <span class="value" id="pitchValue">0°</span>
+    </label>
+  </div>
+  <div class="controls">
+    <button id="reset">Reset camera</button>
+  </div>
+  <p class="expect">Directly on the video: <b>drag</b> to look around and <b>scroll</b> to
+  zoom (a smaller field of view is more zoomed in). Those move the camera without changing
+  the attributes; the sliders follow along via <code>webkitcameramoved</code>, and the
+  readout shows all three — the IDL attribute, the content attribute, and the live camera.</p>
+  <p class="readout" id="readout"></p>
+</div>
+
 <script>
 const APPLE_SAMPLES = "https://devstreaming-cdn.apple.com/videos/streaming/examples/immersive-media/";
-const DECLARED_SOURCE = APPLE_SAMPLES + "180Lighthouse/mvp.m3u8";
+const DECLARED_SOURCE = "assets/equirect360-nometadata.mp4";
 
 const PROJECTION_VALUES = [
+  { value: "auto", note: "the default — the clip's own metadata decides. This clip carries none, so it plays flat." },
+  { value: "360", note: "renders as a full sphere. Nothing but the attribute makes this happen." },
+  { value: "equirectangular", note: "same as 360." },
+  { value: "180", note: "renders as a hemisphere, so the 360° frame is stretched across half a sphere." },
+  { value: "halfequirectangular", note: "same as 180." },
   { value: "fisheye", note: "renders as a fisheye lens." },
-  { value: "auto", note: "the default — the clip's own metadata decides, so this matches the 180° tab." },
-  { value: "equirectangular", note: "renders as a full sphere, overriding the clip's half-equirectangular metadata." },
-  { value: "360", note: "alias for equirectangular." },
-  { value: "halfequirectangular", note: "renders as a hemisphere, which is what this clip's metadata already says." },
-  { value: "180", note: "alias for halfequirectangular." },
   { value: "parametric", note: "renders as a wide-field-of-view lens." },
-  { value: "wfov", note: "alias for parametric." },
-  { value: "not-a-projection", note: "unrecognized, so it behaves exactly like auto." },
+  { value: "wfov", note: "same as parametric." },
+  { value: "not-a-projection", note: "unrecognized, so it behaves exactly like auto — flat." },
 ];
 
 const CLIPS = [
@@ -109,12 +144,74 @@ const tabs = document.getElementById("tabs");
 const expect = document.getElementById("expect");
 const declaredPanel = document.getElementById("declared");
 const projectionSelect = document.getElementById("projectionSelect");
+const readout = document.getElementById("readout");
+
+const CAMERA = [
+  { name: "fieldOfView", attribute: "x-webkit-fieldofview", live: "cameraFieldOfView", fallback: 80 },
+  { name: "yaw", attribute: "x-webkit-yaw", live: "cameraYaw", fallback: 0, wraps: true },
+  { name: "pitch", attribute: "x-webkit-pitch", live: "cameraPitch", fallback: 0 },
+];
+
+let video = null;
 
 PROJECTION_VALUES.forEach(({ value }) => {
   const option = document.createElement("option");
   option.value = option.textContent = value;
   projectionSelect.appendChild(option);
 });
+
+function applyCamera() {
+  if (!video)
+    return;
+  CAMERA.forEach(({ name }) => {
+    const slider = document.getElementById(name);
+    document.getElementById(name + "Value").textContent = slider.value + "°";
+    video[name] = slider.value;
+  });
+  report();
+}
+
+function report() {
+  if (!video) {
+    readout.textContent = "";
+    return;
+  }
+  readout.textContent = CAMERA.map(({ name, attribute, live }) =>
+    `${name} = ${JSON.stringify(video[name])}   ${attribute} = ${JSON.stringify(video.getAttribute(attribute))}` +
+    `   ${live} = ${formatLive(video[live])}`
+  ).join("\n");
+}
+
+function formatLive(value) {
+  return typeof value === "number" ? value.toFixed(1) : String(value);
+}
+
+function syncSlidersToCamera() {
+  if (!video || typeof video.cameraYaw !== "number")
+    return;
+  CAMERA.forEach(({ name, live, wraps }) => {
+    const slider = document.getElementById(name);
+    const degrees = Math.round(wraps ? wrapDegrees(video[live]) : video[live]);
+    const clamped = Math.max(Number(slider.min), Math.min(Number(slider.max), degrees));
+    if (slider.value !== String(clamped)) {
+      slider.value = clamped;
+      document.getElementById(name + "Value").textContent = slider.value + "°";
+    }
+  });
+  report();
+}
+
+function wrapDegrees(degrees) {
+  const wrapped = (degrees + 180) % 360;
+  return (wrapped < 0 ? wrapped + 360 : wrapped) - 180;
+}
+
+function resetCamera() {
+  CAMERA.forEach(({ name, fallback }) => {
+    document.getElementById(name).value = fallback;
+  });
+  applyCamera();
+}
 
 function play(src, projection, expectation) {
   expect.innerHTML = "<b>Expected:</b> " + expectation;
@@ -125,7 +222,10 @@ function play(src, projection, expectation) {
   v.setAttribute("crossorigin", "anonymous");
   v.autoplay = v.loop = v.muted = v.playsInline = v.controls = true;
   v.src = src;
+  v.addEventListener("webkitcameramoved", syncSlidersToCamera);
   mount.appendChild(v);
+  video = v;
+  applyCamera();
 }
 
 function playDeclared() {
@@ -135,6 +235,12 @@ function playDeclared() {
 }
 
 projectionSelect.addEventListener("change", playDeclared);
+
+CAMERA.forEach(({ name }) => {
+  document.getElementById(name).addEventListener("input", applyCamera);
+});
+
+document.getElementById("reset").addEventListener("click", resetCamera);
 
 function select(clip, btn) {
   [...tabs.children].forEach(b => b.classList.toggle("sel", b === btn));
