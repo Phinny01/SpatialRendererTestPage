@@ -25,11 +25,14 @@ The other tabs stream Apple's public immersive-media samples, which carry real A
 
 ### Equi-angular cubemap
 
-The EAC tabs play `assets/eac360-nometadata.mp4` (1152x768, square tiles) and
-`assets/eac360-16x9-nometadata.mp4` (1280x720, non-square tiles, the shape YouTube ships).
+The EAC tabs play `assets/eac360-nometadata.mp4` (1152x768, square 384x384 tiles) and
+`assets/eac360-16x9-nometadata.mp4` (1920x1080, 640x540 tiles, the shape YouTube ships).
 Both are converted from the same Pexels source as the Declared tab with
 `ffmpeg -vf v360=equirect:eac`, so the EAC tabs and the Declared tab on `360` should show the
-same scene. If they differ, a cube face is misplaced or rotated.
+same scene. If they differ, a cube face is misplaced or rotated. The two tabs differ only in
+packing, which is what makes them a pair: face coordinates are normalised per tile, so tile
+aspect should not matter. Both frame sizes divide evenly into a 3x2 grid — avoid sizes that do
+not, such as 1280x720, where a face boundary lands mid-pixel.
 
 Cubemap has no metadata path — nothing produces `VideoProjectionMetadataKind::EquiAngularCubemap`
 — so `x-webkit-projection="eac"` is the only way to select it, and it is never chosen
