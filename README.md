@@ -45,12 +45,12 @@ should look plainly wrong; a plausible-looking result there would mean something
 ### Camera
 
 The Camera panel drives the field of view, yaw and pitch through the reflected
-`fieldOfView` / `yaw` / `pitch` IDL attributes on `HTMLVideoElement`.
+`defaultFieldOfView` / `defaultYaw` / `defaultPitch` IDL attributes on `HTMLVideoElement`.
 
 Dragging and scrolling on the video move the camera without changing those attributes —
-the same split as `muted` and `defaultMuted`. The live camera is readable separately as
-`cameraYaw` / `cameraPitch` / `cameraFieldOfView`, and reports a `webkitcameramoved` event
-(at most one per rendered frame), which is how the sliders follow your drag.
+the same split as `defaultMuted` and `muted`. The live camera is readable separately as
+`fieldOfView` / `yaw` / `pitch`, and reports a `webkitcameramoved` event
+(at most one per rendered frame), which is how the readout follows your drag.
 
 ### Link to website below
 https://phinny01.github.io/SpatialRendererTestPage/

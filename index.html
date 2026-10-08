@@ -39,8 +39,6 @@
                     font-size: 13px; color: #98989d; }
   select { background: #3a3a3c; color: #fff; border: 1px solid rgba(255,255,255,.15);
            border-radius: 8px; padding: 7px 10px; font: inherit; }
-  input[type=range] { width: 180px; accent-color: #0a84ff; }
-  .value { color: #e8e8ed; font: 13px ui-monospace, monospace; }
   .readout { margin: 12px 0 0; font: 13px ui-monospace, monospace; color: #98989d;
              white-space: pre-wrap; }
 </style>
@@ -76,31 +74,16 @@
 
 <div class="panel">
   <h2>Camera</h2>
-  <p class="expect">Where the camera looks, and how wide. These set
-  <code>x-webkit-fieldofview</code>, <code>x-webkit-yaw</code> and
-  <code>x-webkit-pitch</code> through their reflected IDL attributes, so moving a slider
-  should move the view immediately.</p>
-  <div class="controls">
-    <label>Field of view
-      <input type="range" id="fieldOfView" min="30" max="110" step="1" value="80">
-      <span class="value" id="fieldOfViewValue">80°</span>
-    </label>
-    <label>Yaw
-      <input type="range" id="yaw" min="-180" max="180" step="1" value="0">
-      <span class="value" id="yawValue">0°</span>
-    </label>
-    <label>Pitch
-      <input type="range" id="pitch" min="-89" max="89" step="1" value="0">
-      <span class="value" id="pitchValue">0°</span>
-    </label>
-  </div>
-  <div class="controls">
-    <button id="reset">Reset camera</button>
-  </div>
-  <p class="expect">Directly on the video: <b>drag</b> to look around and <b>scroll</b> to
-  zoom (a smaller field of view is more zoomed in). Those move the camera without changing
-  the attributes; the sliders follow along via <code>webkitcameramoved</code>, and the
-  readout shows all three — the IDL attribute, the content attribute, and the live camera.</p>
+  <p class="expect">Each button assigns to <code>video.defaultYaw</code>,
+  <code>video.defaultPitch</code> or <code>video.defaultFieldOfView</code>, which writes the
+  matching <code>x-webkit-</code> attribute and re-frames the view.</p>
+  <div class="controls" id="aims"></div>
+  <p class="expect">Directly on the video: <b>drag</b> to look around and <b>scroll</b> to zoom
+  (a smaller field of view is more zoomed in). Those move the camera without touching the
+  attributes, so the two sets diverge: <code>yaw</code>, <code>pitch</code> and
+  <code>fieldOfView</code> read back where the camera actually is, while the
+  <code>default</code> ones keep whatever was last assigned. After a write the live value lags one
+  frame, since it only changes once the renderer has drawn. All six are numbers, not strings.</p>
   <p class="readout" id="readout"></p>
 </div>
 
@@ -161,9 +144,21 @@ const projectionSelect = document.getElementById("projectionSelect");
 const readout = document.getElementById("readout");
 
 const CAMERA = [
-  { name: "fieldOfView", attribute: "x-webkit-fieldofview", live: "cameraFieldOfView", fallback: 80 },
-  { name: "yaw", attribute: "x-webkit-yaw", live: "cameraYaw", fallback: 0, wraps: true },
-  { name: "pitch", attribute: "x-webkit-pitch", live: "cameraPitch", fallback: 0 },
+  { live: "yaw", declared: "defaultYaw", attribute: "x-webkit-yaw" },
+  { live: "pitch", declared: "defaultPitch", attribute: "x-webkit-pitch" },
+  { live: "fieldOfView", declared: "defaultFieldOfView", attribute: "x-webkit-fieldofview" },
+];
+
+const AIMS = [
+  { label: "Look forward", values: { defaultYaw: 0, defaultPitch: 0 } },
+  { label: "Look left 90°", values: { defaultYaw: -90, defaultPitch: 0 } },
+  { label: "Look right 90°", values: { defaultYaw: 90, defaultPitch: 0 } },
+  { label: "Look behind", values: { defaultYaw: 180, defaultPitch: 0 } },
+  { label: "Look up 45°", values: { defaultPitch: -45 } },
+  { label: "Look down 45°", values: { defaultPitch: 45 } },
+  { label: "Zoom in (40°)", values: { defaultFieldOfView: 40 } },
+  { label: "Zoom out (100°)", values: { defaultFieldOfView: 100 } },
+  { label: "Reset", values: { defaultYaw: 0, defaultPitch: 0, defaultFieldOfView: 80 } },
 ];
 
 let video = null;
@@ -174,14 +169,11 @@ PROJECTION_VALUES.forEach(({ value }) => {
   projectionSelect.appendChild(option);
 });
 
-function applyCamera() {
+function aim(values) {
   if (!video)
     return;
-  CAMERA.forEach(({ name }) => {
-    const slider = document.getElementById(name);
-    document.getElementById(name + "Value").textContent = slider.value + "°";
-    video[name] = slider.value;
-  });
+  for (const [name, value] of Object.entries(values))
+    video[name] = value;
   report();
 }
 
@@ -190,9 +182,8 @@ function report() {
     readout.textContent = "";
     return;
   }
-  readout.textContent = CAMERA.map(({ name, attribute, live }) =>
-    `${name} = ${JSON.stringify(video[name])}   ${attribute} = ${JSON.stringify(video.getAttribute(attribute))}` +
-    `   ${live} = ${formatLive(video[live])}`
+  readout.textContent = CAMERA.map(({ live, declared, attribute }) =>
+    `${live} = ${formatLive(video[live])}   ${declared} = ${formatLive(video[declared])}   ${attribute} = ${JSON.stringify(video.getAttribute(attribute))}`
   ).join("\n");
 }
 
@@ -200,32 +191,7 @@ function formatLive(value) {
   return typeof value === "number" ? value.toFixed(1) : String(value);
 }
 
-function syncSlidersToCamera() {
-  if (!video || typeof video.cameraYaw !== "number")
-    return;
-  CAMERA.forEach(({ name, live, wraps }) => {
-    const slider = document.getElementById(name);
-    const degrees = Math.round(wraps ? wrapDegrees(video[live]) : video[live]);
-    const clamped = Math.max(Number(slider.min), Math.min(Number(slider.max), degrees));
-    if (slider.value !== String(clamped)) {
-      slider.value = clamped;
-      document.getElementById(name + "Value").textContent = slider.value + "°";
-    }
-  });
-  report();
-}
 
-function wrapDegrees(degrees) {
-  const wrapped = (degrees + 180) % 360;
-  return (wrapped < 0 ? wrapped + 360 : wrapped) - 180;
-}
-
-function resetCamera() {
-  CAMERA.forEach(({ name, fallback }) => {
-    document.getElementById(name).value = fallback;
-  });
-  applyCamera();
-}
 
 function play(src, projection, expectation) {
   expect.innerHTML = "<b>Expected:</b> " + expectation;
@@ -236,10 +202,10 @@ function play(src, projection, expectation) {
   v.setAttribute("crossorigin", "anonymous");
   v.autoplay = v.loop = v.muted = v.playsInline = v.controls = true;
   v.src = src;
-  v.addEventListener("webkitcameramoved", syncSlidersToCamera);
+  v.addEventListener("webkitcameramoved", report);
   mount.appendChild(v);
   video = v;
-  resetCamera();
+  report();
 }
 
 function playDeclared() {
@@ -250,11 +216,13 @@ function playDeclared() {
 
 projectionSelect.addEventListener("change", playDeclared);
 
-CAMERA.forEach(({ name }) => {
-  document.getElementById(name).addEventListener("input", applyCamera);
+const aims = document.getElementById("aims");
+AIMS.forEach(({ label, values }) => {
+  const button = document.createElement("button");
+  button.textContent = label;
+  button.addEventListener("click", () => aim(values));
+  aims.appendChild(button);
 });
-
-document.getElementById("reset").addEventListener("click", resetCamera);
 
 function select(clip, btn) {
   [...tabs.children].forEach(b => b.classList.toggle("sel", b === btn));
