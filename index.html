@@ -74,10 +74,16 @@
 
 <div class="panel">
   <h2>Camera</h2>
-  <p class="expect">Each button assigns to <code>video.defaultYaw</code>,
+  <p class="expect">Each button assigns an absolute value to <code>video.defaultYaw</code>,
   <code>video.defaultPitch</code> or <code>video.defaultFieldOfView</code>, which writes the
-  matching <code>x-webkit-</code> attribute and re-frames the view.</p>
+  matching <code>x-webkit-</code> attribute and re-frames the view. Pressing the same one twice
+  does nothing the second time — the attribute already holds that value.</p>
   <div class="controls" id="aims"></div>
+  <p class="expect">These move <b>relative to where you are looking now</b>, which the API has no
+  single attribute for: each one reads the live value and assigns the declared one, as in
+  <code>video.defaultYaw = video.yaw - 90</code>. Drag the video first, then press one, and the
+  turn starts from where you dragged to.</p>
+  <div class="controls" id="nudges"></div>
   <p class="expect">Directly on the video: <b>drag</b> to look around and <b>scroll</b> to zoom
   (a smaller field of view is more zoomed in). Those move the camera without touching the
   attributes, so the two sets diverge: <code>yaw</code>, <code>pitch</code> and
@@ -150,15 +156,24 @@ const CAMERA = [
 ];
 
 const AIMS = [
-  { label: "Look forward", values: { defaultYaw: 0, defaultPitch: 0 } },
-  { label: "Look left 90°", values: { defaultYaw: -90, defaultPitch: 0 } },
-  { label: "Look right 90°", values: { defaultYaw: 90, defaultPitch: 0 } },
-  { label: "Look behind", values: { defaultYaw: 180, defaultPitch: 0 } },
-  { label: "Look up 45°", values: { defaultPitch: -45 } },
-  { label: "Look down 45°", values: { defaultPitch: 45 } },
+  { label: "Face forward", values: { defaultYaw: 0, defaultPitch: 0 } },
+  { label: "Face left (yaw −90°)", values: { defaultYaw: -90, defaultPitch: 0 } },
+  { label: "Face right (yaw 90°)", values: { defaultYaw: 90, defaultPitch: 0 } },
+  { label: "Face behind (yaw 180°)", values: { defaultYaw: 180, defaultPitch: 0 } },
+  { label: "Face up (pitch −45°)", values: { defaultPitch: -45 } },
+  { label: "Face down (pitch 45°)", values: { defaultPitch: 45 } },
   { label: "Zoom in (40°)", values: { defaultFieldOfView: 40 } },
   { label: "Zoom out (100°)", values: { defaultFieldOfView: 100 } },
   { label: "Reset", values: { defaultYaw: 0, defaultPitch: 0, defaultFieldOfView: 80 } },
+];
+
+const NUDGES = [
+  { label: "Turn left 90°", values: v => ({ defaultYaw: v.yaw - 90 }) },
+  { label: "Turn right 90°", values: v => ({ defaultYaw: v.yaw + 90 }) },
+  { label: "Tilt up 30°", values: v => ({ defaultPitch: v.pitch - 30 }) },
+  { label: "Tilt down 30°", values: v => ({ defaultPitch: v.pitch + 30 }) },
+  { label: "Zoom in 10°", values: v => ({ defaultFieldOfView: v.fieldOfView - 10 }) },
+  { label: "Zoom out 10°", values: v => ({ defaultFieldOfView: v.fieldOfView + 10 }) },
 ];
 
 let video = null;
@@ -172,7 +187,8 @@ PROJECTION_VALUES.forEach(({ value }) => {
 function aim(values) {
   if (!video)
     return;
-  for (const [name, value] of Object.entries(values))
+  const resolved = typeof values === "function" ? values(video) : values;
+  for (const [name, value] of Object.entries(resolved))
     video[name] = value;
   report();
 }
@@ -222,6 +238,14 @@ AIMS.forEach(({ label, values }) => {
   button.textContent = label;
   button.addEventListener("click", () => aim(values));
   aims.appendChild(button);
+});
+
+const nudges = document.getElementById("nudges");
+NUDGES.forEach(({ label, values }) => {
+  const button = document.createElement("button");
+  button.textContent = label;
+  button.addEventListener("click", () => aim(values));
+  nudges.appendChild(button);
 });
 
 function select(clip, btn) {
