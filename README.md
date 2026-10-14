@@ -16,7 +16,7 @@ predates the feature.
 ### Declared projection
 
 The Declared tab plays `assets/equirect360-nometadata.mp4`, a 360° clip with no projection
-metadata, so `x-webkit-projection` is the only thing that can make it render as a sphere —
+metadata, so `projection` is the only thing that can make it render as a sphere —
 on `auto` it plays flat. Sourced from [Pexels](https://www.pexels.com/license/) (free to
 use, modification allowed, no attribution required) and trimmed to 1280x640 for size; the
 full-resolution source is not tracked.
@@ -35,7 +35,7 @@ aspect should not matter. Both frame sizes divide evenly into a 3x2 grid — avo
 not, such as 1280x720, where a face boundary lands mid-pixel.
 
 Cubemap has no metadata path — nothing produces `VideoProjectionMetadataKind::EquiAngularCubemap`
-— so `x-webkit-projection="eac"` is the only way to select it, and it is never chosen
+— so `projection="eac"` is the only way to select it, and it is never chosen
 automatically. That is deliberate: auto-engaging on cubemap content would draw over pages such
 as YouTube that already render 360 themselves.
 

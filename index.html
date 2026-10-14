@@ -34,6 +34,10 @@
           background: #000; display: block; border-radius: 10px; }
   .expect { color: #98989d; font-size: 14px; margin: 10px 0 0; }
   .expect b { color: #e8e8ed; font-weight: 600; }
+  .stale { background: #4a2c00; border: 1px solid #a86b00; color: #ffd9a0;
+           border-radius: 10px; padding: 12px 14px; margin: 0 0 16px;
+           font-size: 14px; line-height: 1.45; }
+  .stale code { color: #fff; }
   .controls { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
   .controls label { display: flex; flex-direction: column; gap: 5px;
                     font-size: 13px; color: #98989d; }
@@ -46,23 +50,21 @@
 <body>
 
 <h1>Spatial Video Rendering</h1>
-<p class="sub">Test page for projected video (360°, 180°, wide-FOV) rendered in WebKit's media controls.</p>
+<p class="sub">Projected video (360°, 180°, wide-FOV) in WebKit's media controls.</p>
+
+<div class="stale" id="buildWarning" hidden></div>
 
 <div class="panel" id="setup">
   <h2>Before you start</h2>
-  <ol>
-    <li>Open <b>Develop &rsaquo; Feature Flags</b> (Safari Technology Preview).</li>
-    <li>Enable <code>Spatial Video Rendering</code>. It is <b>off by default</b>.</li>
-    <li>Reload this page.</li>
-  </ol>
+  <p class="expect">Enable <code>Spatial Video Rendering</code> in Feature Flags — it is off by
+  default — then reload.</p>
 </div>
 
 <div id="tabs"></div>
 <div class="panel" id="declared" hidden>
   <h2>Declared projection</h2>
-  <p class="expect">A 360° clip that carries <b>no projection metadata at all</b>, so
-  <code>x-webkit-projection</code> is the only thing that can make it render as a sphere.
-  Leave the value on <code>auto</code> and it plays flat.</p>
+  <p class="expect">A 360° clip with <b>no projection metadata</b>, so only
+  <code>projection</code> can make it a sphere. On <code>auto</code> it plays flat.</p>
   <div class="controls">
     <label>Value
       <select id="projectionSelect"></select>
@@ -74,22 +76,15 @@
 
 <div class="panel">
   <h2>Camera</h2>
-  <p class="expect">Each button assigns an absolute value to <code>video.defaultYaw</code>,
-  <code>video.defaultPitch</code> or <code>video.defaultFieldOfView</code>, which writes the
-  matching <code>x-webkit-</code> attribute and re-frames the view. Pressing the same one twice
-  does nothing the second time — the attribute already holds that value.</p>
+  <p class="expect">Absolute: each writes <code>defaultYaw</code>, <code>defaultPitch</code> or
+  <code>defaultFieldOfView</code>. Pressing one twice does nothing the second time.</p>
   <div class="controls" id="aims"></div>
-  <p class="expect">These move <b>relative to where you are looking now</b>, which the API has no
-  single attribute for: each one reads the live value and assigns the declared one, as in
-  <code>video.defaultYaw = video.yaw - 90</code>. Drag the video first, then press one, and the
-  turn starts from where you dragged to.</p>
+  <p class="expect">Relative to the current view, via
+  <code>video.defaultYaw = video.yaw - 90</code>. Drag first, then press one.</p>
   <div class="controls" id="nudges"></div>
-  <p class="expect">Directly on the video: <b>drag</b> to look around and <b>scroll</b> to zoom
-  (a smaller field of view is more zoomed in). Those move the camera without touching the
-  attributes, so the two sets diverge: <code>yaw</code>, <code>pitch</code> and
-  <code>fieldOfView</code> read back where the camera actually is, while the
-  <code>default</code> ones keep whatever was last assigned. After a write the live value lags one
-  frame, since it only changes once the renderer has drawn. All six are numbers, not strings.</p>
+  <p class="expect"><b>Drag</b> to look around, <b>scroll</b> to zoom. Neither touches the
+  attributes, so the live values diverge from the <code>default</code> ones, lagging a write by
+  one frame.</p>
   <p class="readout" id="readout"></p>
 </div>
 
@@ -98,46 +93,46 @@ const APPLE_SAMPLES = "https://devstreaming-cdn.apple.com/videos/streaming/examp
 const DECLARED_SOURCE = "assets/equirect360-nometadata.mp4";
 
 const PROJECTION_VALUES = [
-  { value: "auto", note: "the default — the clip's own metadata decides. This clip carries none, so it plays flat." },
-  { value: "360", note: "renders as a full sphere. Nothing but the attribute makes this happen." },
+  { value: "auto", note: "the clip's own metadata decides. This clip has none, so it plays flat." },
+  { value: "360", note: "a full sphere. Only the attribute makes this happen." },
   { value: "equirectangular", note: "same as 360." },
-  { value: "180", note: "renders as a hemisphere, so the 360° frame is stretched across half a sphere." },
+  { value: "180", note: "a hemisphere, so the 360° frame is stretched across half a sphere." },
   { value: "halfequirectangular", note: "same as 180." },
-  { value: "fisheye", note: "renders as a fisheye lens." },
-  { value: "parametric", note: "renders as a wide-field-of-view lens." },
+  { value: "fisheye", note: "a fisheye lens." },
+  { value: "parametric", note: "a wide-field-of-view lens." },
   { value: "wfov", note: "same as parametric." },
-  { value: "eac", note: "renders as an equi-angular cubemap. This clip is equirectangular, so it should look plainly wrong — that is the point. Compare the EAC tabs, which use real cubemap clips." },
-  { value: "equiangularcubemap", note: "same as eac, and just as wrong on this clip." },
-  { value: "not-a-projection", note: "unrecognized, so it behaves exactly like auto — flat." },
+  { value: "eac", note: "an equi-angular cubemap. This clip is equirectangular, so it should look plainly wrong." },
+  { value: "equiangularcubemap", note: "same as eac, and just as wrong here." },
+  { value: "not-a-projection", note: "unrecognized, so it behaves like auto — flat." },
 ];
 
 const CLIPS = [
   {
     label: "360°",
     src: APPLE_SAMPLES + "360Lighthouse/mvp.m3u8",
-    expect: "Projection read from the clip’s APMP metadata (equirectangular). Drag to look in any direction."
+    expect: "Equirectangular, from the clip's APMP metadata. Drag to look anywhere."
   },
   {
     label: "180°",
     src: APPLE_SAMPLES + "180Lighthouse/mvp.m3u8",
-    expect: "Projection read from the clip’s APMP metadata (half-equirectangular). Drag to look around; the view stops at the edge of the captured hemisphere."
+    expect: "Half-equirectangular, from metadata. Drag; the view stops at the edge of the hemisphere."
   },
   {
     label: "Wide FOV",
     src: APPLE_SAMPLES + "wfovCausewayWalk/mvp.m3u8",
-    expect: "Projection read from the clip’s APMP metadata (parametric wide-FOV). Drag to pan within the wide frame."
+    expect: "Parametric wide-FOV, from metadata. Drag to pan within the frame."
   },
   {
     label: "EAC",
     src: "assets/eac360-nometadata.mp4",
     projection: "eac",
-    expect: "An equi-angular cubemap: six cube faces packed into a 3×2 grid, 1152×768 so each face is square. There is no metadata path for cubemap, so <code>x-webkit-projection=\"eac\"</code> is the only way to render it. It is built from the same source as the Declared tab, so it should look like that tab does on <code>360</code> — if faces are misplaced or rotated, the layout table is wrong."
+    expect: "Six cube faces in a 3×2 grid, 1152×768 so each is square. No metadata path exists, so <code>projection=\"eac\"</code> is the only way in. Same source as Declared — it should match that tab on <code>360</code>."
   },
   {
     label: "EAC 16:9",
     src: "assets/eac360-16x9-nometadata.mp4",
     projection: "eac",
-    expect: "The same cubemap packed into 1920×1080, so the tiles are 640×540 rather than square — the shape YouTube actually ships. Should be indistinguishable from the EAC tab, because tile coordinates are normalised per face."
+    expect: "The same cubemap at 1920×1080, so tiles are 640×540 rather than square. Should be indistinguishable from the EAC tab."
   },
   { label: "Declared", declared: true },
 ];
@@ -148,11 +143,35 @@ const expect = document.getElementById("expect");
 const declaredPanel = document.getElementById("declared");
 const projectionSelect = document.getElementById("projectionSelect");
 const readout = document.getElementById("readout");
+const buildWarning = document.getElementById("buildWarning");
+
+function checkBuild()
+{
+  const proto = HTMLVideoElement.prototype;
+  if (!("projection" in proto))
+    return;
+
+  let problem = null;
+  if (!("defaultFieldOfView" in proto))
+    problem = "This build predates the <code>defaultYaw</code> / <code>defaultPitch</code> / <code>defaultFieldOfView</code> rename, so the camera buttons do nothing.";
+  else {
+    const probe = document.createElement("video");
+    probe.defaultYaw = 1;
+    if (probe.hasAttribute("x-webkit-yaw"))
+      problem = "This build still uses the <code>x-webkit-</code> attribute prefix, so the projection selector does nothing.";
+  }
+
+  if (!problem)
+    return;
+  buildWarning.innerHTML = "<b>Build mismatch.</b> " + problem;
+  buildWarning.hidden = false;
+}
+checkBuild();
 
 const CAMERA = [
-  { live: "yaw", declared: "defaultYaw", attribute: "x-webkit-yaw" },
-  { live: "pitch", declared: "defaultPitch", attribute: "x-webkit-pitch" },
-  { live: "fieldOfView", declared: "defaultFieldOfView", attribute: "x-webkit-fieldofview" },
+  { live: "yaw", declared: "defaultYaw", attribute: "yaw" },
+  { live: "pitch", declared: "defaultPitch", attribute: "pitch" },
+  { live: "fieldOfView", declared: "defaultFieldOfView", attribute: "fieldofview" },
 ];
 
 const AIMS = [
@@ -214,7 +233,7 @@ function play(src, projection, expectation) {
   mount.textContent = "";
   const v = document.createElement("video");
   if (projection)
-    v.setAttribute("x-webkit-projection", projection);
+    v.setAttribute("projection", projection);
   v.setAttribute("crossorigin", "anonymous");
   v.autoplay = v.loop = v.muted = v.playsInline = v.controls = true;
   v.src = src;
@@ -227,7 +246,7 @@ function play(src, projection, expectation) {
 function playDeclared() {
   const value = projectionSelect.value;
   const { note } = PROJECTION_VALUES.find(entry => entry.value === value);
-  play(DECLARED_SOURCE, value, `<code>x-webkit-projection="${value}"</code> — ${note}`);
+  play(DECLARED_SOURCE, value, `<code>projection="${value}"</code> — ${note}`);
 }
 
 projectionSelect.addEventListener("change", playDeclared);
