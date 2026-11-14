@@ -262,7 +262,17 @@ function playDeclared() {
 }
 
 document.getElementById("fsElement").addEventListener("click", () => mount.requestFullscreen());
-document.getElementById("fsNative").addEventListener("click", () => video && video.webkitEnterFullscreen());
+document.getElementById("fsNative").addEventListener("click", () => {
+  if (!video) {
+    expect.innerHTML = "<b>Native fullscreen:</b> load a clip first.";
+    return;
+  }
+  try {
+    video.webkitEnterFullscreen();
+  } catch (error) {
+    expect.innerHTML = `<b>Native fullscreen rejected:</b> ${error.name} — supportsFullscreen = ${video.webkitSupportsFullscreen}`;
+  }
+});
 
 projectionSelect.addEventListener("change", playDeclared);
 
