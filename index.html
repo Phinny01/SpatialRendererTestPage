@@ -32,6 +32,12 @@
   button.sel { background: #0a84ff; border-color: #0a84ff; }
   video { width: 100%; max-width: 720px; aspect-ratio: 2 / 1;
           background: #000; display: block; border-radius: 10px; }
+  #mount:fullscreen, #mount:-webkit-full-screen {
+          display: flex; align-items: center; justify-content: center;
+          width: 100%; height: 100%; background: #000; }
+  #mount:fullscreen video, #mount:-webkit-full-screen video {
+          width: 100%; height: 100%; max-width: none;
+          aspect-ratio: auto; border-radius: 0; }
   .expect { color: #98989d; font-size: 14px; margin: 10px 0 0; }
   .expect b { color: #e8e8ed; font-weight: 600; }
   .stale { background: #4a2c00; border: 1px solid #a86b00; color: #ffd9a0;
@@ -73,11 +79,14 @@
 </div>
 <div id="mount"></div>
 <div id="fullscreenButtons" style="display:flex;gap:8px;margin-top:10px">
-  <button id="fsElement">requestFullscreen() &mdash; element</button>
-  <button id="fsNative">webkitEnterFullscreen() &mdash; native</button>
+  <button id="fsElement">Element fullscreen (wrapper)</button>
+  <button id="fsNative">Native fullscreen (video)</button>
 </div>
-<div id="fsState" style="font:12px ui-monospace,Menlo,monospace;color:#0f0;white-space:pre-wrap;margin-top:8px">fullscreen: (none)</div>
-<p class="expect" id="fsExpect"><b>Expected:</b> element fullscreen keeps the canvas in the page; native fullscreen hands the video to AVKit.</p>
+<p class="expect">Element fullscreen calls <code>requestFullscreen()</code> on the wrapper, not the
+<code>&lt;video&gt;</code> &mdash; on iOS <code>HTMLVideoElement</code> overrides
+<code>requestFullscreen()</code> and routes it to native, so a wrapper is the only way in. The video
+never enters video-fullscreen mode, so the projection keeps rendering. Native fullscreen hands the
+video to AVKit and the projection is lost.</p>
 <p class="expect" id="expect"></p>
 
 <div class="panel">
@@ -141,41 +150,6 @@ const CLIPS = [
 ];
 
 const mount = document.getElementById("mount");
-const fsExpect = document.getElementById("fsExpect");
-const fsState = document.getElementById("fsState");
-const fsLog = [];
-
-function reportFullscreen(tag) {
-  const fsEl = document.fullscreenElement || document.webkitFullscreenElement || null;
-  const which = !fsEl ? "NATIVE (no fullscreenElement)"
-    : (fsEl === video ? "ELEMENT (fullscreenElement === video)" : "ELEMENT (other: " + fsEl.tagName + ")");
-  const line = tag + " -> " + which
-    + " | presentationMode=" + (video ? video.webkitPresentationMode : "-")
-    + " | canvas=" + (video && internalsCanvas() ? "yes" : "no");
-  fsLog.push(line);
-  fsState.textContent = "fullscreen:\n" + fsLog.slice(-8).join("\n");
-}
-
-function internalsCanvas() {
-  try { return !!window.internals && !!internals.shadowRoot(video) && !!internals.shadowRoot(video).querySelector("canvas"); }
-  catch (e) { return false; }
-}
-
-for (const type of ["fullscreenchange", "webkitfullscreenchange", "fullscreenerror", "webkitfullscreenerror"])
-  document.addEventListener(type, event => reportFullscreen(type + " on " + (event.target && event.target.tagName)));
-document.addEventListener("webkitpresentationmodechanged", () => reportFullscreen("presentationmodechanged"), true);
-
-// Poll, in case fullscreenElement is assigned after the events we listen for.
-let lastPoll = "";
-setInterval(() => {
-  const fsEl = document.fullscreenElement || document.webkitFullscreenElement || null;
-  const now = (fsEl ? fsEl.tagName : "null") + "/" + (video ? video.webkitPresentationMode : "-");
-  if (now !== lastPoll) {
-    lastPoll = now;
-    reportFullscreen("poll");
-  }
-}, 250);
-
 const tabs = document.getElementById("tabs");
 const expect = document.getElementById("expect");
 const declaredPanel = document.getElementById("declared");
@@ -287,42 +261,8 @@ function playDeclared() {
   play(DECLARED_SOURCE, value, `<code>projection="${value}"</code> — ${note}`);
 }
 
-document.getElementById("fsElement").addEventListener("click", () => {
-  if (!video)
-    return;
-  const have = "requestFullscreen=" + (typeof video.requestFullscreen)
-    + " webkitRequestFullscreen=" + (typeof video.webkitRequestFullscreen)
-    + " fullscreenEnabled=" + document.fullscreenEnabled
-    + " webkitFullscreenEnabled=" + document.webkitFullscreenEnabled;
-  if (typeof video.requestFullscreen === "function") {
-    fsExpect.innerHTML = "<b>calling requestFullscreen()</b><br>" + have;
-    video.requestFullscreen().then(
-      () => fsExpect.innerHTML = "<b>requestFullscreen RESOLVED</b><br>" + have,
-      e => fsExpect.innerHTML = "<b>requestFullscreen REJECTED:</b> " + e.name + " &mdash; " + e.message + "<br>" + have);
-    return;
-  }
-  if (typeof video.webkitRequestFullscreen === "function") {
-    fsExpect.innerHTML = "<b>calling webkitRequestFullscreen() (unprefixed absent)</b><br>" + have;
-    try { video.webkitRequestFullscreen(); }
-    catch (e) { fsExpect.innerHTML = "<b>webkitRequestFullscreen THREW:</b> " + e.name + " &mdash; " + e.message + "<br>" + have; }
-    return;
-  }
-  fsExpect.innerHTML = "<b>neither API exists on this build</b><br>" + have;
-});
-
-document.getElementById("fsNative").addEventListener("click", () => {
-  if (!video)
-    return;
-  if (!video.webkitEnterFullscreen) {
-    fsExpect.innerHTML = "<b>Expected:</b> no webkitEnterFullscreen on this build.";
-    return;
-  }
-  try {
-    video.webkitEnterFullscreen();
-  } catch (error) {
-    fsExpect.innerHTML = "<b>webkitEnterFullscreen threw:</b> " + error.name + " &mdash; " + error.message;
-  }
-});
+document.getElementById("fsElement").addEventListener("click", () => mount.requestFullscreen());
+document.getElementById("fsNative").addEventListener("click", () => video && video.webkitEnterFullscreen());
 
 projectionSelect.addEventListener("change", playDeclared);
 
