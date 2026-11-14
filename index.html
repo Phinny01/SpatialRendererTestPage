@@ -76,6 +76,7 @@
   <button id="fsElement">requestFullscreen() &mdash; element</button>
   <button id="fsNative">webkitEnterFullscreen() &mdash; native</button>
 </div>
+<div id="fsState" style="font:12px ui-monospace,Menlo,monospace;color:#0f0;white-space:pre-wrap;margin-top:8px">fullscreen: (none)</div>
 <p class="expect" id="fsExpect"><b>Expected:</b> element fullscreen keeps the canvas in the page; native fullscreen hands the video to AVKit.</p>
 <p class="expect" id="expect"></p>
 
@@ -141,6 +142,29 @@ const CLIPS = [
 
 const mount = document.getElementById("mount");
 const fsExpect = document.getElementById("fsExpect");
+const fsState = document.getElementById("fsState");
+const fsLog = [];
+
+function reportFullscreen(tag) {
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement || null;
+  const which = !fsEl ? "NATIVE (no fullscreenElement)"
+    : (fsEl === video ? "ELEMENT (fullscreenElement === video)" : "ELEMENT (other: " + fsEl.tagName + ")");
+  const line = tag + " -> " + which
+    + " | presentationMode=" + (video ? video.webkitPresentationMode : "-")
+    + " | canvas=" + (video && internalsCanvas() ? "yes" : "no");
+  fsLog.push(line);
+  fsState.textContent = "fullscreen:\n" + fsLog.slice(-8).join("\n");
+}
+
+function internalsCanvas() {
+  try { return !!window.internals && !!internals.shadowRoot(video) && !!internals.shadowRoot(video).querySelector("canvas"); }
+  catch (e) { return false; }
+}
+
+for (const type of ["fullscreenchange", "webkitfullscreenchange"])
+  document.addEventListener(type, () => reportFullscreen(type));
+document.addEventListener("webkitpresentationmodechanged", () => reportFullscreen("presentationmodechanged"), true);
+
 const tabs = document.getElementById("tabs");
 const expect = document.getElementById("expect");
 const declaredPanel = document.getElementById("declared");
