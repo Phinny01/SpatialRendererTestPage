@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spatial Video Rendering — WebKit test page</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0 auto; padding: 28px 20px 64px; max-width: 860px;
+    background: #1c1c1e; color: #e8e8ed;
+    font: 15px/1.5 -apple-system, system-ui, sans-serif;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #98989d; margin: 0 0 24px; }
+  .panel {
+    background: #2c2c2e; border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px; padding: 16px 18px; margin-bottom: 20px;
+  }
+  .panel h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .5px;
+              color: #98989d; margin: 0 0 10px; }
+  code { background: rgba(255,255,255,.1); padding: 1px 6px; border-radius: 4px;
+         font: 13px ui-monospace, monospace; }
+  ol, ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  #tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  button {
+    background: #2c2c2e; color: #fff; border: 1px solid rgba(255,255,255,.15);
+    border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #3a3a3c; }
+  button.sel { background: #0a84ff; border-color: #0a84ff; }
+  video { width: 100%; max-width: 720px; aspect-ratio: 2 / 1;
+          background: #000; display: block; border-radius: 10px; }
+  .expect { color: #98989d; font-size: 14px; margin: 10px 0 0; }
+  .expect b { color: #e8e8ed; font-weight: 600; }
+  .stale { background: #4a2c00; border: 1px solid #a86b00; color: #ffd9a0;
+           border-radius: 10px; padding: 12px 14px; margin: 0 0 16px;
+           font-size: 14px; line-height: 1.45; }
+  .stale code { color: #fff; }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+  .controls label { display: flex; flex-direction: column; gap: 5px;
+                    font-size: 13px; color: #98989d; }
+  select { background: #3a3a3c; color: #fff; border: 1px solid rgba(255,255,255,.15);
+           border-radius: 8px; padding: 7px 10px; font: inherit; }
+  .readout { margin: 12px 0 0; font: 13px ui-monospace, monospace; color: #98989d;
+             white-space: pre-wrap; }
+</style>
+</head>
+<body>
+
+<h1>Spatial Video Rendering</h1>
+<p class="sub">Projected video (360°, 180°, wide-FOV) in WebKit's media controls.</p>
+
+<div class="stale" id="buildWarning" hidden></div>
+
+<div class="panel" id="setup">
+  <h2>Before you start</h2>
+  <p class="expect">Enable <code>Spatial Video Rendering</code> in Feature Flags — it is off by
+  default — then reload.</p>
+</div>
+
+<div id="tabs"></div>
+<div class="panel" id="declared" hidden>
+  <h2>Declared projection</h2>
+  <p class="expect">A 360° clip with <b>no projection metadata</b>, so only
+  <code>projection</code> can make it a sphere. On <code>auto</code> it plays flat.</p>
+  <div class="controls">
+    <label>Value
+      <select id="projectionSelect"></select>
+    </label>
+  </div>
+</div>
+<div id="mount"></div>
+<p class="expect" id="expect"></p>
+
+<div class="panel">
+  <h2>Camera</h2>
+  <p class="expect">Absolute: each writes <code>defaultYaw</code>, <code>defaultPitch</code> or
+  <code>defaultFieldOfView</code>. Pressing one twice does nothing the second time.</p>
+  <div class="controls" id="aims"></div>
+  <p class="expect">Relative to the current view, via
+  <code>video.defaultYaw = video.yaw - 90</code>. Drag first, then press one.</p>
+  <div class="controls" id="nudges"></div>
+  <p class="expect"><b>Drag</b> to look around, <b>scroll</b> to zoom. Neither touches the
+  attributes, so the live values diverge from the <code>default</code> ones, lagging a write by
+  one frame.</p>
+  <p class="readout" id="readout"></p>
+</div>
+
+<script>
+const APPLE_SAMPLES = "https://devstreaming-cdn.apple.com/videos/streaming/examples/immersive-media/";
+const DECLARED_SOURCE = "assets/equirect360-nometadata.mp4";
+
+const PROJECTION_VALUES = [
+  { value: "auto", note: "the clip's own metadata decides. This clip has none, so it plays flat." },
+  { value: "rectilinear", note: "flat, whatever the clip's metadata says." },
+  { value: "equirectangular", note: "a full sphere. Only the attribute makes this happen." },
+  { value: "half-equirectangular", note: "a hemisphere, so the 360° frame is stretched across half a sphere." },
+  { value: "fisheye", note: "a fisheye lens." },
+  { value: "parametric", note: "a wide-field-of-view lens." },
+  { value: "equiangular-cubemap", note: "an equi-angular cubemap. This clip is equirectangular, so it should look plainly wrong." },
+  { value: "not-a-projection", note: "unrecognized, so it behaves like auto — flat." },
+];
+
+const CLIPS = [
+  {
+    label: "360°",
+    src: APPLE_SAMPLES + "360Lighthouse/mvp.m3u8",
+    expect: "Equirectangular, from the clip's APMP metadata. Drag to look anywhere."
+  },
+  {
+    label: "180°",
+    src: APPLE_SAMPLES + "180Lighthouse/mvp.m3u8",
+    expect: "Half-equirectangular, from metadata. Drag; the view stops at the edge of the hemisphere."
+  },
+  {
+    label: "Wide FOV",
+    src: APPLE_SAMPLES + "wfovCausewayWalk/mvp.m3u8",
+    expect: "Parametric wide-FOV, from metadata. Drag to pan within the frame."
+  },
+  {
+    label: "EAC",
+    src: "assets/eac360-nometadata.mp4",
+    projection: "equiangular-cubemap",
+    expect: "Six cube faces in a 3×2 grid, 1152×768 so each is square. No metadata path exists, so <code>projection=\"equiangular-cubemap\"</code> is the only way in. Same source as Declared — it should match that tab on <code>equirectangular</code>."
+  },
+  {
+    label: "EAC 16:9",
+    src: "assets/eac360-16x9-nometadata.mp4",
+    projection: "equiangular-cubemap",
+    expect: "The same cubemap at 1920×1080, so tiles are 640×540 rather than square. Should be indistinguishable from the EAC tab."
+  },
+  { label: "Declared", declared: true },
+];
+
+const mount = document.getElementById("mount");
+const tabs = document.getElementById("tabs");
+const expect = document.getElementById("expect");
+const declaredPanel = document.getElementById("declared");
+const projectionSelect = document.getElementById("projectionSelect");
+const readout = document.getElementById("readout");
+const buildWarning = document.getElementById("buildWarning");
+
+function checkBuild()
+{
+  const proto = HTMLVideoElement.prototype;
+  if (!("projection" in proto))
+    return;
+
+  let problem = null;
+  if (!("defaultFieldOfView" in proto))
+    problem = "This build predates the <code>defaultYaw</code> / <code>defaultPitch</code> / <code>defaultFieldOfView</code> rename, so the camera buttons do nothing.";
+  else {
+    const probe = document.createElement("video");
+    probe.defaultYaw = 1;
+    if (probe.hasAttribute("x-webkit-yaw"))
+      problem = "This build still uses the <code>x-webkit-</code> attribute prefix, so the projection selector does nothing.";
+  }
+
+  if (!problem)
+    return;
+  buildWarning.innerHTML = "<b>Build mismatch.</b> " + problem;
+  buildWarning.hidden = false;
+}
+checkBuild();
+
+const CAMERA = [
+  { live: "yaw", declared: "defaultYaw", attribute: "yaw" },
+  { live: "pitch", declared: "defaultPitch", attribute: "pitch" },
+  { live: "fieldOfView", declared: "defaultFieldOfView", attribute: "fieldofview" },
+];
+
+const AIMS = [
+  { label: "Face forward", values: { defaultYaw: 0, defaultPitch: 0 } },
+  { label: "Face left (yaw −90°)", values: { defaultYaw: -90, defaultPitch: 0 } },
+  { label: "Face right (yaw 90°)", values: { defaultYaw: 90, defaultPitch: 0 } },
+  { label: "Face behind (yaw 180°)", values: { defaultYaw: 180, defaultPitch: 0 } },
+  { label: "Face up (pitch −45°)", values: { defaultPitch: -45 } },
+  { label: "Face down (pitch 45°)", values: { defaultPitch: 45 } },
+  { label: "Zoom in (40°)", values: { defaultFieldOfView: 40 } },
+  { label: "Zoom out (100°)", values: { defaultFieldOfView: 100 } },
+  { label: "Reset", values: { defaultYaw: 0, defaultPitch: 0, defaultFieldOfView: 80 } },
+];
+
+const NUDGES = [
+  { label: "Turn left 90°", values: v => ({ defaultYaw: v.yaw - 90 }) },
+  { label: "Turn right 90°", values: v => ({ defaultYaw: v.yaw + 90 }) },
+  { label: "Tilt up 30°", values: v => ({ defaultPitch: v.pitch - 30 }) },
+  { label: "Tilt down 30°", values: v => ({ defaultPitch: v.pitch + 30 }) },
+  { label: "Zoom in 10°", values: v => ({ defaultFieldOfView: v.fieldOfView - 10 }) },
+  { label: "Zoom out 10°", values: v => ({ defaultFieldOfView: v.fieldOfView + 10 }) },
+];
+
+let video = null;
+
+PROJECTION_VALUES.forEach(({ value }) => {
+  const option = document.createElement("option");
+  option.value = option.textContent = value;
+  projectionSelect.appendChild(option);
+});
+
+function aim(values) {
+  if (!video)
+    return;
+  const resolved = typeof values === "function" ? values(video) : values;
+  for (const [name, value] of Object.entries(resolved))
+    video[name] = value;
+  report();
+}
+
+function report() {
+  if (!video) {
+    readout.textContent = "";
+    return;
+  }
+  readout.textContent = CAMERA.map(({ live, declared, attribute }) =>
+    `${live} = ${formatLive(video[live])}   ${declared} = ${formatLive(video[declared])}   ${attribute} = ${JSON.stringify(video.getAttribute(attribute))}`
+  ).join("\n");
+}
+
+function formatLive(value) {
+  return typeof value === "number" ? value.toFixed(1) : String(value);
+}
+
+
+
+function play(src, projection, expectation) {
+  expect.innerHTML = "<b>Expected:</b> " + expectation;
+  mount.textContent = "";
+  const v = document.createElement("video");
+  if (projection)
+    v.setAttribute("projection", projection);
+  v.setAttribute("crossorigin", "anonymous");
+  v.autoplay = v.loop = v.muted = v.playsInline = v.controls = true;
+  v.src = src;
+  v.addEventListener("webkitcameramoved", report);
+  mount.appendChild(v);
+  video = v;
+  report();
+}
+
+function playDeclared() {
+  const value = projectionSelect.value;
+  const { note } = PROJECTION_VALUES.find(entry => entry.value === value);
+  play(DECLARED_SOURCE, value, `<code>projection="${value}"</code> — ${note}`);
+}
+
+projectionSelect.addEventListener("change", playDeclared);
+
+const aims = document.getElementById("aims");
+AIMS.forEach(({ label, values }) => {
+  const button = document.createElement("button");
+  button.textContent = label;
+  button.addEventListener("click", () => aim(values));
+  aims.appendChild(button);
+});
+
+const nudges = document.getElementById("nudges");
+NUDGES.forEach(({ label, values }) => {
+  const button = document.createElement("button");
+  button.textContent = label;
+  button.addEventListener("click", () => aim(values));
+  nudges.appendChild(button);
+});
+
+function select(clip, btn) {
+  [...tabs.children].forEach(b => b.classList.toggle("sel", b === btn));
+  declaredPanel.hidden = !clip.declared;
+  if (clip.declared)
+    playDeclared();
+  else
+    play(clip.src, clip.projection || null, clip.expect);
+}
+
+CLIPS.forEach((clip, i) => {
+  const btn = document.createElement("button");
+  btn.textContent = clip.label;
+  btn.addEventListener("click", () => select(clip, btn));
+  tabs.appendChild(btn);
+  if (i === 0)
+    select(clip, btn);
+});
+</script>
+
+</body>
+</html>

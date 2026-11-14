@@ -72,6 +72,11 @@
   </div>
 </div>
 <div id="mount"></div>
+<div id="fullscreenButtons" style="display:flex;gap:8px;margin-top:10px">
+  <button id="fsElement">requestFullscreen() &mdash; element</button>
+  <button id="fsNative">webkitEnterFullscreen() &mdash; native</button>
+</div>
+<p class="expect" id="fsExpect"><b>Expected:</b> element fullscreen keeps the canvas in the page; native fullscreen hands the video to AVKit.</p>
 <p class="expect" id="expect"></p>
 
 <div class="panel">
@@ -94,15 +99,12 @@ const DECLARED_SOURCE = "assets/equirect360-nometadata.mp4";
 
 const PROJECTION_VALUES = [
   { value: "auto", note: "the clip's own metadata decides. This clip has none, so it plays flat." },
-  { value: "360", note: "a full sphere. Only the attribute makes this happen." },
-  { value: "equirectangular", note: "same as 360." },
-  { value: "180", note: "a hemisphere, so the 360° frame is stretched across half a sphere." },
-  { value: "halfequirectangular", note: "same as 180." },
+  { value: "rectilinear", note: "flat, whatever the clip's metadata says." },
+  { value: "equirectangular", note: "a full sphere. Only the attribute makes this happen." },
+  { value: "half-equirectangular", note: "a hemisphere, so the 360° frame is stretched across half a sphere." },
   { value: "fisheye", note: "a fisheye lens." },
   { value: "parametric", note: "a wide-field-of-view lens." },
-  { value: "wfov", note: "same as parametric." },
-  { value: "eac", note: "an equi-angular cubemap. This clip is equirectangular, so it should look plainly wrong." },
-  { value: "equiangularcubemap", note: "same as eac, and just as wrong here." },
+  { value: "equiangular-cubemap", note: "an equi-angular cubemap. This clip is equirectangular, so it should look plainly wrong." },
   { value: "not-a-projection", note: "unrecognized, so it behaves like auto — flat." },
 ];
 
@@ -125,19 +127,20 @@ const CLIPS = [
   {
     label: "EAC",
     src: "assets/eac360-nometadata.mp4",
-    projection: "eac",
-    expect: "Six cube faces in a 3×2 grid, 1152×768 so each is square. No metadata path exists, so <code>projection=\"eac\"</code> is the only way in. Same source as Declared — it should match that tab on <code>360</code>."
+    projection: "equiangular-cubemap",
+    expect: "Six cube faces in a 3×2 grid, 1152×768 so each is square. No metadata path exists, so <code>projection=\"equiangular-cubemap\"</code> is the only way in. Same source as Declared — it should match that tab on <code>equirectangular</code>."
   },
   {
     label: "EAC 16:9",
     src: "assets/eac360-16x9-nometadata.mp4",
-    projection: "eac",
+    projection: "equiangular-cubemap",
     expect: "The same cubemap at 1920×1080, so tiles are 640×540 rather than square. Should be indistinguishable from the EAC tab."
   },
   { label: "Declared", declared: true },
 ];
 
 const mount = document.getElementById("mount");
+const fsExpect = document.getElementById("fsExpect");
 const tabs = document.getElementById("tabs");
 const expect = document.getElementById("expect");
 const declaredPanel = document.getElementById("declared");
@@ -248,6 +251,33 @@ function playDeclared() {
   const { note } = PROJECTION_VALUES.find(entry => entry.value === value);
   play(DECLARED_SOURCE, value, `<code>projection="${value}"</code> — ${note}`);
 }
+
+document.getElementById("fsElement").addEventListener("click", () => {
+  if (!video)
+    return;
+  const request = video.requestFullscreen || video.webkitRequestFullscreen;
+  if (!request) {
+    fsExpect.innerHTML = "<b>Expected:</b> no requestFullscreen on this build.";
+    return;
+  }
+  const result = request.call(video);
+  if (result && result.catch)
+    result.catch(error => fsExpect.innerHTML = "<b>requestFullscreen rejected:</b> " + error.name + " &mdash; " + error.message);
+});
+
+document.getElementById("fsNative").addEventListener("click", () => {
+  if (!video)
+    return;
+  if (!video.webkitEnterFullscreen) {
+    fsExpect.innerHTML = "<b>Expected:</b> no webkitEnterFullscreen on this build.";
+    return;
+  }
+  try {
+    video.webkitEnterFullscreen();
+  } catch (error) {
+    fsExpect.innerHTML = "<b>webkitEnterFullscreen threw:</b> " + error.name + " &mdash; " + error.message;
+  }
+});
 
 projectionSelect.addEventListener("change", playDeclared);
 
