@@ -279,14 +279,24 @@ function playDeclared() {
 document.getElementById("fsElement").addEventListener("click", () => {
   if (!video)
     return;
-  const request = video.requestFullscreen || video.webkitRequestFullscreen;
-  if (!request) {
-    fsExpect.innerHTML = "<b>Expected:</b> no requestFullscreen on this build.";
+  const have = "requestFullscreen=" + (typeof video.requestFullscreen)
+    + " webkitRequestFullscreen=" + (typeof video.webkitRequestFullscreen)
+    + " fullscreenEnabled=" + document.fullscreenEnabled
+    + " webkitFullscreenEnabled=" + document.webkitFullscreenEnabled;
+  if (typeof video.requestFullscreen === "function") {
+    fsExpect.innerHTML = "<b>calling requestFullscreen()</b><br>" + have;
+    video.requestFullscreen().then(
+      () => fsExpect.innerHTML = "<b>requestFullscreen RESOLVED</b><br>" + have,
+      e => fsExpect.innerHTML = "<b>requestFullscreen REJECTED:</b> " + e.name + " &mdash; " + e.message + "<br>" + have);
     return;
   }
-  const result = request.call(video);
-  if (result && result.catch)
-    result.catch(error => fsExpect.innerHTML = "<b>requestFullscreen rejected:</b> " + error.name + " &mdash; " + error.message);
+  if (typeof video.webkitRequestFullscreen === "function") {
+    fsExpect.innerHTML = "<b>calling webkitRequestFullscreen() (unprefixed absent)</b><br>" + have;
+    try { video.webkitRequestFullscreen(); }
+    catch (e) { fsExpect.innerHTML = "<b>webkitRequestFullscreen THREW:</b> " + e.name + " &mdash; " + e.message + "<br>" + have; }
+    return;
+  }
+  fsExpect.innerHTML = "<b>neither API exists on this build</b><br>" + have;
 });
 
 document.getElementById("fsNative").addEventListener("click", () => {
