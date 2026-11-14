@@ -161,9 +161,20 @@ function internalsCanvas() {
   catch (e) { return false; }
 }
 
-for (const type of ["fullscreenchange", "webkitfullscreenchange"])
-  document.addEventListener(type, () => reportFullscreen(type));
+for (const type of ["fullscreenchange", "webkitfullscreenchange", "fullscreenerror", "webkitfullscreenerror"])
+  document.addEventListener(type, event => reportFullscreen(type + " on " + (event.target && event.target.tagName)));
 document.addEventListener("webkitpresentationmodechanged", () => reportFullscreen("presentationmodechanged"), true);
+
+// Poll, in case fullscreenElement is assigned after the events we listen for.
+let lastPoll = "";
+setInterval(() => {
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement || null;
+  const now = (fsEl ? fsEl.tagName : "null") + "/" + (video ? video.webkitPresentationMode : "-");
+  if (now !== lastPoll) {
+    lastPoll = now;
+    reportFullscreen("poll");
+  }
+}, 250);
 
 const tabs = document.getElementById("tabs");
 const expect = document.getElementById("expect");
