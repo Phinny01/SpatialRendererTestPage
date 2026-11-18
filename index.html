@@ -97,6 +97,11 @@ video to AVKit and the projection is lost.</p>
   <p class="expect">Relative to the current view, via
   <code>video.defaultYaw = video.yaw - 90</code>. Drag first, then press one.</p>
   <div class="controls" id="nudges"></div>
+  <p class="expect">Live: each writes <code>yaw</code>, <code>pitch</code> or
+  <code>fieldOfView</code> &mdash; the camera as it is now. The view should move, the
+  <code>default</code> values and the markup should <b>not</b> change, and the
+  <code>cameramoved</code> line below should report the new view a frame later.</p>
+  <div class="controls" id="lives"></div>
   <p class="expect"><b>Drag</b> to look around, <b>scroll</b> to zoom. Neither touches the
   attributes, so the live values diverge from the <code>default</code> ones, lagging a write by
   one frame.</p>
@@ -177,6 +182,15 @@ function checkBuild()
     probe.defaultYaw = 1;
     if (probe.hasAttribute("x-webkit-yaw"))
       problem = "This build still uses the <code>x-webkit-</code> attribute prefix, so the projection selector does nothing.";
+    else {
+      probe.yaw = 42;
+      if (probe.yaw !== 42)
+        problem = "This build's live camera attributes are read-only, so the <b>Live</b> buttons do nothing.";
+      else if (typeof window.CameraMovedEvent !== "function")
+        problem = "This build has no <code>CameraMovedEvent</code>, so the readout cannot show the event's own values.";
+      else if (!("oncameramoved" in proto))
+        problem = "This build has no <code>oncameramoved</code>, and still fires <code>webkitcameramoved</code>.";
+    }
   }
 
   if (!problem)
@@ -213,6 +227,15 @@ const NUDGES = [
   { label: "Zoom out 10°", values: v => ({ defaultFieldOfView: v.fieldOfView + 10 }) },
 ];
 
+const LIVES = [
+  { label: "Look left (yaw −90°)", values: { yaw: -90 } },
+  { label: "Look right (yaw 90°)", values: { yaw: 90 } },
+  { label: "Look up (pitch −45°)", values: { pitch: -45 } },
+  { label: "Zoom in (40°)", values: { fieldOfView: 40 } },
+  { label: "Turn right 90° from here", values: v => ({ yaw: v.yaw + 90 }) },
+  { label: "Out of bounds (pitch 400°)", values: { pitch: 400 } },
+];
+
 let video = null;
 
 PROJECTION_VALUES.forEach(({ value }) => {
@@ -230,14 +253,17 @@ function aim(values) {
   report();
 }
 
-function report() {
+function report(event) {
   if (!video) {
     readout.textContent = "";
     return;
   }
-  readout.textContent = CAMERA.map(({ live, declared, attribute }) =>
+  const lines = CAMERA.map(({ live, declared, attribute }) =>
     `${live} = ${formatLive(video[live])}   ${declared} = ${formatLive(video[declared])}   ${attribute} = ${JSON.stringify(video.getAttribute(attribute))}`
-  ).join("\n");
+  );
+  if (event && event.type === "cameramoved")
+    lines.push(`cameramoved: yaw = ${formatLive(event.yaw)}   pitch = ${formatLive(event.pitch)}   fieldOfView = ${formatLive(event.fieldOfView)}`);
+  readout.textContent = lines.join("\n");
 }
 
 function formatLive(value) {
@@ -255,7 +281,7 @@ function play(src, projection, expectation) {
   v.setAttribute("crossorigin", "anonymous");
   v.autoplay = v.loop = v.muted = v.playsInline = v.controls = true;
   v.src = src;
-  v.addEventListener("webkitcameramoved", report);
+  v.addEventListener("cameramoved", report);
   mount.appendChild(v);
   video = v;
   report();
@@ -288,6 +314,14 @@ AIMS.forEach(({ label, values }) => {
   button.textContent = label;
   button.addEventListener("click", () => aim(values));
   aims.appendChild(button);
+});
+
+const lives = document.getElementById("lives");
+LIVES.forEach(({ label, values }) => {
+  const button = document.createElement("button");
+  button.textContent = label;
+  button.addEventListener("click", () => aim(values));
+  lives.appendChild(button);
 });
 
 const nudges = document.getElementById("nudges");
