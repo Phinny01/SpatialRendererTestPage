@@ -146,6 +146,12 @@ const CLIPS = [
     projection: "equiangular-cubemap",
     expect: "The same cubemap at 1920×1080, so tiles are 640×540 rather than square. Should be indistinguishable from the EAC tab."
   },
+  {
+    label: "Rectilinear",
+    src: APPLE_SAMPLES + "360Lighthouse/mvp.m3u8",
+    projection: "rectilinear",
+    expect: "The same clip as the 360° tab, which declares equirectangular metadata, but <code>projection=\"rectilinear\"</code> presents it flat. The keyword overrides the file, and dragging does nothing because there is no renderer. A build that predates the keyword set treats <code>rectilinear</code> as unrecognized, so it falls back to the metadata and this tab looks exactly like the 360° one."
+  },
   { label: "Declared", declared: true },
 ];
 
